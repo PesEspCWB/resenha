@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>Resenha - Validador de cupons</title>
+    <title>Validador</title>
 
     <script src="https://unpkg.com/vue@2.6.10/dist/vue.min.js"></script>
     <script src="https://unpkg.com/vue-qrcode-reader@2.0.3/dist/vue-qrcode-reader.browser.js"></script>
@@ -12,61 +12,151 @@
       rel="stylesheet"
       href="https://unpkg.com/vue-qrcode-reader@2.0.3/dist/vue-qrcode-reader.css"
     />
+    <link rel="stylesheet" href="main.css" />
   </head>
   <body>
-    <div class="" id="app">
+    <div class="container" id="app">
+      <h1>Resenha - Validador de Cupons</h1>
+
       <p>
-        Último código: <b>{{ decodedContent }}</b>
+        Leia o QR code apresentado pelo jogador ou insira o código do cupom
+        manualmente
       </p>
 
+      <input v-model="cupom" placeholder="Código do cupom" />
+      <button v-on:click="checarCodigoCupom">Verificar Cupom</button>
+
+      <!-- <p>
+        Último código capturado: <b>{{ decodedContent }}</b>
+      </p>
+ -->
       <p class="error">
         {{ errorMessage }}
       </p>
 
       <qrcode-stream @decode="onDecode" @init="onInit"></qrcode-stream>
     </div>
-  </body>
-  <script>
-    new Vue({
-      el: "#app",
 
-      data() {
-        return {
-          decodedContent: "",
-          errorMessage: ""
-        };
-      },
+    <script>
+      new Vue({
+        el: "#app",
 
-      methods: {
-        onDecode(content) {
-          this.decodedContent = content;
+        data() {
+          return {
+            decodedContent: "",
+            errorMessage: "",
+            cupom: ""
+          };
         },
 
-        onInit(promise) {
-          promise
-            .then(() => {
-              console.log("Successfully initilized! Ready for scanning now!");
-            })
-            .catch(error => {
-              if (error.name === "NotAllowedError") {
-                this.errorMessage = "Hey! I need access to your camera";
-              } else if (error.name === "NotFoundError") {
-                this.errorMessage = "Do you even have a camera on your device?";
-              } else if (error.name === "NotSupportedError") {
-                this.errorMessage =
-                  "Seems like this page is served in non-secure context (HTTPS, localhost or file://)";
-              } else if (error.name === "NotReadableError") {
-                this.errorMessage =
-                  "Couldn't access your camera. Is it already in use?";
-              } else if ("OverconstrainedError") {
-                this.errorMessage =
-                  "Constraints don't match any installed camera. Did you asked for the front camera although there is none?";
-              } else {
-                this.errorMessage = "UNKNOWN ERROR: " + error.message;
-              }
-            });
+        methods: {
+          checarCodigoCupom(event) {
+            console.log(event);
+            // verificar status (ativo - pode ser resgatado, inativo - não pode) do cupom no database (firebase)
+            if (this.cupom == "") {
+              alert("Você precisa inserir um código de cupom!");
+              return;
+            }
+
+            var cupom = this.cupom;
+            // this.decodedContent = cupom;
+
+            firebase
+              .database()
+              .ref("/cupons/" + this.cupom)
+              .once("value")
+              .then(function(snapshot) {
+                if (snapshot.val() == null) {
+                  alert("Este cupom não existe!");
+                } else if (snapshot.val().status == "inativo") {
+                  console.log(snapshot.val().dataResgate);
+                  alert(
+                    `Este cupom já foi resgatado em ${
+                      snapshot.val().dataResgate
+                    }`
+                  );
+                } else if (snapshot.val().status == "ativo") {
+                  firebase
+                    .database()
+                    .ref("/cupons/" + cupom)
+                    .set({
+                      status: "inativo",
+                      dataResgate: new Date().toLocaleString("pt-BR")
+                    });
+                  alert("CUPOM RESGATADO COM SUCESSO!");
+                }
+              });
+
+            // if (event == null) {
+            //   console.log("entrei");
+            //   return;
+            // }
+            // this.decodedContent = cupom;
+          },
+
+          onDecode(content) {
+            this.decodedContent = content;
+            this.cupom = content;
+
+            // TODO: disparar checagem automática após captura do qr code
+            // this.checarCodigoCupom();
+          },
+
+          onInit(promise) {
+            promise
+              .then(() => {
+                console.log("Successfully initilized! Ready for scanning now!");
+              })
+              .catch(error => {
+                if (error.name === "NotAllowedError") {
+                  this.errorMessage =
+                    "Você precisa liberar o acesso a sua câmera para leitura do QR code";
+                }
+                //   else if (error.name === "NotFoundError") {
+                //     this.errorMessage = "Do you even have a camera on your device?";
+                //   } else if (error.name === "NotSupportedError") {
+                //     this.errorMessage =
+                //       "Seems like this page is served in non-secure context (HTTPS, localhost or file://)";
+                //   } else if (error.name === "NotReadableError") {
+                //     this.errorMessage =
+                //       "Couldn't access your camera. Is it already in use?";
+                //   } else if ("OverconstrainedError") {
+                //     this.errorMessage =
+                //       "Constraints don't match any installed camera. Did you asked for the front camera although there is none?";
+                //   }
+                else {
+                  this.errorMessage =
+                    "Oops! Alguma coisa deu errado. Por favor contate o suporte";
+                }
+              });
+          }
         }
-      }
-    });
-  </script>
+      });
+    </script>
+
+    <!-- The core Firebase JS SDK is always required and must be listed first -->
+    <script src="https://www.gstatic.com/firebasejs/6.6.2/firebase-app.js"></script>
+
+    <!-- TODO: Add SDKs for Firebase products that you want to use
+     https://firebase.google.com/docs/web/setup#available-libraries -->
+    <script src="https://www.gstatic.com/firebasejs/6.6.1/firebase-database.js"></script>
+
+    <script>
+      // Your web app's Firebase configuration
+      var firebaseConfig = {
+        apiKey: "AIzaSyCBwYCIwV1hOwEC5Krqipkmt9rcM5IhpX4",
+        authDomain: "resenha-qr-validator.firebaseapp.com",
+        databaseURL: "https://resenha-qr-validator.firebaseio.com",
+        projectId: "resenha-qr-validator",
+        storageBucket: "",
+        messagingSenderId: "1097733706066",
+        appId: "1:1097733706066:web:4a4f940ecc68e81326aa8b"
+      };
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+
+      // Get a reference to the database service
+      var database = firebase.database();
+    </script>
+  </body>
 </html>
